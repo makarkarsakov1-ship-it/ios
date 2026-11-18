@@ -214,7 +214,7 @@ private struct DemoBalanceEditorView: View {
                                 TextField(
                                     "Демо-количество",
                                     text: Binding(
-                                        get: { store.overrides[asset.asset.assetId]?.amount ?? "" },
+                                        get: { store.savedAmountText(for: asset.asset.assetId) ?? "" },
                                         set: { _ = store.setAmount($0, for: asset.asset.assetId) }
                                     )
                                 )
