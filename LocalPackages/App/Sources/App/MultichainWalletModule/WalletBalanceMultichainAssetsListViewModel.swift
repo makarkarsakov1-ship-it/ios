@@ -522,7 +522,11 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
         )
 
         let fiatTotal = assets.reduce(Decimal.zero) { partial, asset in
-            partial + (multichainFormatter.convertedAmount(for: asset, currency: displayCurrency) ?? .zero)
+            if let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId),
+               let unitPrice = multichainFormatter.lookupDouble(in: asset.price.prices, currency: displayCurrency) {
+                return partial + demoAmount * Decimal(unitPrice)
+            }
+            return partial + (multichainFormatter.convertedAmount(for: asset, currency: displayCurrency) ?? .zero)
         }
         let displayAmount = BigUInt(max(tonAmount, 0))
         let balanceText = isSecureMode
@@ -597,11 +601,15 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
                 rate: Decimal(prices.lhs) / Decimal(prices.rhs),
                 diff24h: nil
             )
-            totalTon += rateConverter.convertToDecimal(
-                amount: asset.balance,
-                amountFractionLength: asset.asset.decimals,
-                rate: rate
-            )
+            if let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId) {
+                totalTon += demoAmount * rate.rate
+            } else {
+                totalTon += rateConverter.convertToDecimal(
+                    amount: asset.balance,
+                    amountFractionLength: asset.asset.decimals,
+                    rate: rate
+                )
+            }
             didConvert = true
         }
 
