@@ -4,7 +4,16 @@ import TKUIKit
 
 struct WalletBalanceMultichainAssetsListView: View {
     @ObservedObject var viewModel: WalletBalanceMultichainAssetsListViewModel
+    @ObservedObject private var demoBalanceStore: DemoBalanceStore
     let showsSkeleton: Bool
+
+    @State private var showsDemoEditor = false
+
+    init(viewModel: WalletBalanceMultichainAssetsListViewModel, showsSkeleton: Bool) {
+        self.viewModel = viewModel
+        self._demoBalanceStore = ObservedObject(wrappedValue: viewModel.demoBalanceStore)
+        self.showsSkeleton = showsSkeleton
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if showsSkeleton {
@@ -28,6 +37,12 @@ struct WalletBalanceMultichainAssetsListView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showsDemoEditor) {
+            DemoBalanceEditorView(
+                store: demoBalanceStore,
+                assets: viewModel.demoAssets
+            )
         }
     }
 
@@ -94,9 +109,24 @@ struct WalletBalanceMultichainAssetsListView: View {
     }
 
     private var listTitle: some View {
-        ListTitleView(
-            config: listTitleConfig
-        )
+        HStack(spacing: 8) {
+            ListTitleView(config: listTitleConfig)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                showsDemoEditor = true
+            } label: {
+                Text(demoBalanceStore.isEnabled ? "DEMO ON" : "DEMO")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(demoBalanceStore.isEnabled ? Color.white : Color.accentColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        demoBalanceStore.isEnabled ? Color.accentColor : Color.accentColor.opacity(0.10),
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(.plain)
+        }
         .padding(.trailing, 7)
     }
 
@@ -146,5 +176,67 @@ private extension WalletBalanceMultichainAssetsListView {
         static let errorTopPadding: CGFloat = 32
         static let expandAnimation: Animation = .easeInOut(duration: 0.25)
         static let skeletonRowCount = 10
+    }
+}
+
+
+private struct DemoBalanceEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var store: DemoBalanceStore
+    let assets: [MultichainAsset]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle(
+                        "Demo Mode",
+                        isOn: Binding(
+                            get: { store.isEnabled },
+                            set: { store.setEnabled($0) }
+                        )
+                    )
+                } footer: {
+                    Text("Изменения влияют только на отображение балансов на этом экране. Реальные средства и транзакции не меняются.")
+                }
+
+                Section("Баланс активов") {
+                    if assets.isEmpty {
+                        Text("Сначала дождись загрузки списка активов.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(assets, id: \.asset.assetId) { asset in
+                            HStack(spacing: 12) {
+                                Text(asset.asset.symbol)
+                                    .font(.body.weight(.medium))
+                                    .frame(minWidth: 56, alignment: .leading)
+                                TextField(
+                                    "Демо-количество",
+                                    text: Binding(
+                                        get: { store.overrides[asset.asset.assetId]?.amount ?? "" },
+                                        set: { _ = store.setAmount($0, for: asset.asset.assetId) }
+                                    )
+                                )
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Button("Сбросить демо-балансы", role: .destructive) {
+                        store.reset()
+                    }
+                }
+            }
+            .navigationTitle("Demo Mode")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { dismiss() }
+                }
+            }
+        }
     }
 }
