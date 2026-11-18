@@ -211,6 +211,7 @@ private extension MultichainWalletCoordinator {
         pushAuthorizationModel: PushAuthorizationModel
     ) -> MultichainWalletViewModel {
         let storesAssembly = keeperCoreMainAssembly.storesAssembly
+        demoBalanceStore.setWallet(wallet)
 
         let balanceViewModel = MultichainWalletBalanceSectionViewModel(
             wallet: wallet,
