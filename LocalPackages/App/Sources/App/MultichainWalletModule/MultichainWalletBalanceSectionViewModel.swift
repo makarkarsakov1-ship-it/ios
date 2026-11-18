@@ -204,17 +204,18 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
             return nil
         }
 
+        let effectiveCurrency = originalTotal.currency
         let amount = total.assets.reduce(originalTotal.amount) { partial, asset in
             guard let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId),
-                  let originalAssetValue = portfolioFormatting.convertedAmount(for: asset, currency: currency),
-                  let unitPrice = portfolioFormatting.lookupDouble(in: asset.price.prices, currency: currency)
+                  let originalAssetValue = portfolioFormatting.convertedAmount(for: asset, currency: effectiveCurrency),
+                  let unitPrice = portfolioFormatting.lookupDouble(in: asset.price.prices, currency: effectiveCurrency)
             else {
                 return partial
             }
             let demoAssetValue = demoAmount * Decimal(unitPrice)
             return partial - originalAssetValue + demoAssetValue
         }
-        return (amount, originalTotal.currency)
+        return (amount, effectiveCurrency)
     }
 
     private func setConfig(_ config: BalanceViewConfig) {
