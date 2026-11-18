@@ -80,6 +80,22 @@ final class MultichainAssetsListSecureModeTests: XCTestCase {
         XCTAssertEqual(asset.balance, BigUInt(1_500_000))
     }
 
+    func test_changingDemoOverrideRebuildsLoadedRows() async {
+        let context = makeContext(isSecureMode: false)
+        context.viewModel.applyVisibilityUpdate(makeVisibilityUpdate())
+
+        context.demoBalanceStore.setEnabled(true)
+        XCTAssertTrue(context.demoBalanceStore.setAmount("10", for: makeAsset().asset.assetId))
+
+        await waitUntil {
+            await MainActor.run {
+                self.amounts(in: context.viewModel)?.balance == "10"
+            }
+        }
+
+        XCTAssertEqual(amounts(in: context.viewModel)?.fiat, "$\u{2009}20")
+    }
+
     func test_rowMasksBalanceAndFiatInSecureMode() {
         let context = makeContext(isSecureMode: true)
 
