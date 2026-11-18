@@ -188,8 +188,16 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
     }
 
     private func portfolioTotal() -> (amount: Decimal, currency: Currency)? {
-        guard let total = portfolioStore.getState()[wallet] else { return nil }
         let currency = currencyStore.getState()
+        guard let total = portfolioStore.getState()[wallet] else {
+            guard demoBalanceStore.isEnabled, !demoBalanceStore.customAssets.isEmpty else { return nil }
+            let customTotal = demoBalanceStore.customAssets.reduce(Decimal.zero) { partial, asset in
+                let amount = Decimal(string: asset.amount, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+                let price = Decimal(string: asset.unitPrice, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+                return partial + amount * price
+            }
+            return (customTotal, currency)
+        }
         guard demoBalanceStore.isEnabled else {
             return portfolioFormatting.portfolioFiatTotalAndCurrency(
                 from: total.fiatPrice,
@@ -215,7 +223,12 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
             let demoAssetValue = demoAmount * Decimal(unitPrice)
             return partial - originalAssetValue + demoAssetValue
         }
-        return (amount, effectiveCurrency)
+        let customTotal = demoBalanceStore.customAssets.reduce(Decimal.zero) { partial, asset in
+            let quantity = Decimal(string: asset.amount, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+            let unitPrice = Decimal(string: asset.unitPrice, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+            return partial + quantity * unitPrice
+        }
+        return (amount + customTotal, effectiveCurrency)
     }
 
     private func setConfig(_ config: BalanceViewConfig) {
