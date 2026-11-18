@@ -87,6 +87,7 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
     private let amountFormatter: AmountFormatter
     private let portfolioStore: MultichainPortfolioStore
     let demoBalanceStore: DemoBalanceStore
+    private var demoStoreCancellable: AnyCancellable?
     private let stakingPoolsStore: StakingPoolsStore
     private let processedBalanceStore: ProcessedBalanceStore
     private let appSettingsStore: AppSettingsStore
@@ -158,6 +159,12 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
         self.amountFormatter = amountFormatter
         self.portfolioStore = portfolioStore
         self.demoBalanceStore = demoBalanceStore
+
+        demoStoreCancellable = demoBalanceStore.objectWillChange.sink { [weak self] in
+            Task { @MainActor in
+                self?.refreshPresentation()
+            }
+        }
         self.stakingPoolsStore = stakingPoolsStore
         self.processedBalanceStore = processedBalanceStore
         self.appSettingsStore = appSettingsStore
