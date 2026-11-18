@@ -76,7 +76,7 @@ final class MultichainAssetsListSecureModeTests: XCTestCase {
 
         let amounts = try? XCTUnwrap(amounts(in: context.viewModel))
         XCTAssertEqual(amounts?.balance, "10")
-        XCTAssertEqual(amounts?.fiat, "$\\u{2009}20")
+        XCTAssertEqual(amounts?.fiat, "$\u{2009}20")
         XCTAssertEqual(asset.balance, BigUInt(1_500_000))
     }
 
