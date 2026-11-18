@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class DemoBalanceStoreTests: XCTestCase {
     func test_demoOverrideIsHiddenUntilDemoModeIsEnabledAndPersists() {
-        let defaults = makeDefaults()
+        let (suiteName, defaults) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = DemoBalanceStore(defaults: defaults)
 
@@ -65,9 +65,8 @@ final class DemoBalanceStoreTests: XCTestCase {
 }
 
 private extension DemoBalanceStoreTests {
-    var suiteName: String { "DemoBalanceStoreTests.\(String(describing: self))" }
-
-    func makeDefaults() -> UserDefaults {
-        UserDefaults(suiteName: suiteName)!
+    func makeDefaults() -> (suiteName: String, defaults: UserDefaults) {
+        let suiteName = "DemoBalanceStoreTests.\(UUID().uuidString)"
+        return (suiteName, UserDefaults(suiteName: suiteName)!)
     }
 }
