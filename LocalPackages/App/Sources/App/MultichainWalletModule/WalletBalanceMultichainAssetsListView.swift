@@ -186,6 +186,11 @@ private struct DemoBalanceEditorView: View {
     @ObservedObject var store: DemoBalanceStore
     let assets: [MultichainAsset]
 
+    @State private var newName = ""
+    @State private var newSymbol = ""
+    @State private var newAmount = ""
+    @State private var newPrice = ""
+
     var body: some View {
         NavigationStack {
             Form {
@@ -225,6 +230,60 @@ private struct DemoBalanceEditorView: View {
                     }
                 }
 
+                Section("Свои демо-токены") {
+                    ForEach(store.customAssets) { asset in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(asset.name)
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Text(asset.symbol)
+                                    .foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                TextField("Количество", text: customBinding(asset, keyPath: \.amount))
+                                    .keyboardType(.decimalPad)
+                                TextField("Цена за 1", text: customBinding(asset, keyPath: \.unitPrice))
+                                    .keyboardType(.decimalPad)
+                            }
+                            Button("Удалить токен", role: .destructive) {
+                                store.removeCustomAsset(id: asset.id)
+                            }
+                            .font(.caption)
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    TextField("Название", text: $newName)
+                    TextField("Тикер (например, TEST)", text: $newSymbol)
+                        .textInputAutocapitalization(.characters)
+                    TextField("Количество", text: $newAmount)
+                        .keyboardType(.decimalPad)
+                    TextField("Цена за 1 в валюте портфеля", text: $newPrice)
+                        .keyboardType(.decimalPad)
+
+                    Button("Добавить демо-токен") {
+                        guard store.addCustomAsset(
+                            name: newName,
+                            symbol: newSymbol,
+                            amount: newAmount,
+                            unitPrice: newPrice
+                        ) else { return }
+                        newName = ""
+                        newSymbol = ""
+                        newAmount = ""
+                        newPrice = ""
+                        store.setEnabled(true)
+                    }
+                    .disabled(
+                        newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        newSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        newAmount.isEmpty || newPrice.isEmpty
+                    )
+                } footer: {
+                    Text("Свои токены существуют только в Demo Mode. Цена задаётся вручную в текущей валюте портфеля; в блокчейн они не добавляются.")
+                }
+
                 Section {
                     Button("Сбросить демо-балансы", role: .destructive) {
                         store.reset()
@@ -239,5 +298,19 @@ private struct DemoBalanceEditorView: View {
                 }
             }
         }
+    }
+
+    private func customBinding(
+        _ asset: DemoBalanceStore.CustomAsset,
+        keyPath: WritableKeyPath<DemoBalanceStore.CustomAsset, String>
+    ) -> Binding<String> {
+        Binding(
+            get: { store.customAssets.first(where: { $0.id == asset.id })?[keyPath: keyPath] ?? asset[keyPath: keyPath] },
+            set: { value in
+                var updated = store.customAssets.first(where: { $0.id == asset.id }) ?? asset
+                updated[keyPath: keyPath] = value
+                _ = store.updateCustomAsset(updated)
+            }
+        )
     }
 }
