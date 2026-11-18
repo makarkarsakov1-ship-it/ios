@@ -86,6 +86,8 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
     private let currencyStore: CurrencyStore
     private let amountFormatter: AmountFormatter
     private let portfolioStore: MultichainPortfolioStore
+    let demoBalanceStore: DemoBalanceStore
+    private var demoStoreCancellable: AnyCancellable?
     private let stakingPoolsStore: StakingPoolsStore
     private let processedBalanceStore: ProcessedBalanceStore
     private let appSettingsStore: AppSettingsStore
@@ -114,6 +116,8 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
 
     let canManage: Bool
 
+    var demoAssets: [MultichainAsset] { state.rowData?.assets ?? [] }
+
     private(set) var wallet: Wallet
 
     var onSelectAsset: ((MultichainAsset) -> Void)?
@@ -139,6 +143,7 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
         currencyStore: CurrencyStore,
         amountFormatter: AmountFormatter,
         portfolioStore: MultichainPortfolioStore,
+        demoBalanceStore: DemoBalanceStore,
         stakingPoolsStore: StakingPoolsStore,
         processedBalanceStore: ProcessedBalanceStore,
         appSettingsStore: AppSettingsStore,
@@ -153,6 +158,13 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
         self.currencyStore = currencyStore
         self.amountFormatter = amountFormatter
         self.portfolioStore = portfolioStore
+        self.demoBalanceStore = demoBalanceStore
+
+        demoStoreCancellable = demoBalanceStore.objectWillChange.sink { [weak self] in
+            Task { @MainActor in
+                self?.refreshPresentation()
+            }
+        }
         self.stakingPoolsStore = stakingPoolsStore
         self.processedBalanceStore = processedBalanceStore
         self.appSettingsStore = appSettingsStore
@@ -224,7 +236,9 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
             return
         }
         needsPresentationRefresh = false
-        guard let rowData = state.rowData, !rowData.assets.isEmpty else { return }
+        guard let rowData = state.rowData,
+              !rowData.assets.isEmpty || !demoBalanceStore.customAssets.isEmpty
+        else { return }
         state = state.settingRowData(
             makeRowData(
                 assets: rowData.assets,
@@ -464,6 +478,12 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
             selections[row.id] = .asset(asset)
         }
 
+        if demoBalanceStore.isEnabled {
+            rows.append(contentsOf: demoBalanceStore.customAssets.map {
+                makeDemoRow($0, displayCurrency: displayCurrency, isSecureMode: isSecureMode)
+            })
+        }
+
         return RowData(
             assets: visibleAssets,
             rows: rows,
@@ -510,7 +530,11 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
         )
 
         let fiatTotal = assets.reduce(Decimal.zero) { partial, asset in
-            partial + (multichainFormatter.convertedAmount(for: asset, currency: displayCurrency) ?? .zero)
+            if let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId),
+               let unitPrice = multichainFormatter.lookupDouble(in: asset.price.prices, currency: displayCurrency) {
+                return partial + demoAmount * Decimal(unitPrice)
+            }
+            return partial + (multichainFormatter.convertedAmount(for: asset, currency: displayCurrency) ?? .zero)
         }
         let displayAmount = BigUInt(max(tonAmount, 0))
         let balanceText = isSecureMode
@@ -585,11 +609,15 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
                 rate: Decimal(prices.lhs) / Decimal(prices.rhs),
                 diff24h: nil
             )
-            totalTon += rateConverter.convertToDecimal(
-                amount: asset.balance,
-                amountFractionLength: asset.asset.decimals,
-                rate: rate
-            )
+            if let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId) {
+                totalTon += demoAmount * rate.rate
+            } else {
+                totalTon += rateConverter.convertToDecimal(
+                    amount: asset.balance,
+                    amountFractionLength: asset.asset.decimals,
+                    rate: rate
+                )
+            }
             didConvert = true
         }
 
@@ -633,17 +661,18 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
             in: item.price.prices,
             currency: displayCurrency
         ) ?? 0
+        let demoAmount = demoBalanceStore.amount(for: item.asset.assetId)
         let balance = isSecureMode
             ? String.secureModeValueShort
-            : multichainFormatter.formatAmount(
-                amount: item.balance,
-                fractionDigits: item.asset.decimals,
-                amountFormatter: amountFormatter
-            )
-        let fiatTotal = multichainFormatter.convertedAmount(
-            for: item,
-            currency: displayCurrency
-        ) ?? .zero
+            : (demoBalanceStore.amountText(for: item.asset.assetId)
+                ?? multichainFormatter.formatAmount(
+                    amount: item.balance,
+                    fractionDigits: item.asset.decimals,
+                    amountFormatter: amountFormatter
+                ))
+        let fiatTotal = demoAmount.map { $0 * Decimal(unitPrice) }
+            ?? multichainFormatter.convertedAmount(for: item, currency: displayCurrency)
+            ?? .zero
 
         let priceText = amountFormatter.format(
             decimal: Decimal(unitPrice),
@@ -697,6 +726,46 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
             ),
             avatarImageSource: imageSource,
             showsVerificationCheckmark: item.asset.isTrusted
+        )
+    }
+
+    private func makeDemoRow(
+        _ asset: DemoBalanceStore.CustomAsset,
+        displayCurrency: Currency,
+        isSecureMode: Bool
+    ) -> AssetBalanceRowCellContent {
+        let amount = Decimal(string: asset.amount, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+        let unitPrice = Decimal(string: asset.unitPrice, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+        let fiatTotal = amount * unitPrice
+        let balanceText = isSecureMode ? String.secureModeValueShort : asset.amount
+        let priceText = amountFormatter.format(
+            decimal: unitPrice,
+            accessory: .fiat(displayCurrency),
+            style: .compact
+        )
+        let fiatText = isSecureMode
+            ? String.secureModeValueShort
+            : amountFormatter.format(
+                decimal: fiatTotal,
+                accessory: .fiat(displayCurrency),
+                style: .compact
+            )
+
+        return AssetBalanceRowCellContent(
+            id: "demo/\(asset.id)",
+            title: asset.symbol,
+            badge: nil,
+            apy: nil,
+            displayMode: .includingDiffs(
+                balance: balanceText,
+                price: priceText,
+                delta: nil,
+                fiat: fiatText,
+                showsPin: false,
+                priceColor: .textSecondary
+            ),
+            avatarImageSource: .image(.TKUIKit.Icons.Size44.tonLogo),
+            showsVerificationCheckmark: false
         )
     }
 

@@ -54,6 +54,7 @@ public final class MultichainWalletCoordinator: RouterCoordinator<NavigationCont
     private let coreAssembly: TKCore.CoreAssembly
     private let keeperCoreMainAssembly: KeeperCore.MainAssembly
     private let collectiblesModule: CollectiblesModule
+    private let demoBalanceStore = DemoBalanceStore()
 
     private weak var walletContainerViewController: WalletContainerViewController?
     private weak var collectiblesCoordinator: CollectiblesCoordinator?
@@ -153,6 +154,7 @@ private extension MultichainWalletCoordinator {
                     coreAssembly: coreAssembly,
                     configuration: configuration,
                     multichainService: multichainService,
+                    demoBalanceStore: demoBalanceStore,
                     headerMapper: headerMapper,
                     totalBalanceUpdateQueue: totalBalanceUpdateQueue,
                     pushAuthorizationModel: pushAuthorizationModel
@@ -203,11 +205,13 @@ private extension MultichainWalletCoordinator {
         coreAssembly: TKCore.CoreAssembly,
         configuration: Configuration,
         multichainService: MultichainService,
+        demoBalanceStore: DemoBalanceStore,
         headerMapper: WalletBalanceHeaderMapper,
         totalBalanceUpdateQueue: DispatchQueue,
         pushAuthorizationModel: PushAuthorizationModel
     ) -> MultichainWalletViewModel {
         let storesAssembly = keeperCoreMainAssembly.storesAssembly
+        demoBalanceStore.setWalletID(wallet.id)
 
         let balanceViewModel = MultichainWalletBalanceSectionViewModel(
             wallet: wallet,
@@ -222,6 +226,7 @@ private extension MultichainWalletCoordinator {
             balanceLoader: keeperCoreMainAssembly.loadersAssembly.balanceLoader,
             walletsStore: storesAssembly.walletsStore,
             portfolioStore: storesAssembly.multichainPortfolioStore,
+            demoBalanceStore: demoBalanceStore,
             currencyStore: storesAssembly.currencyStore,
             appSettingsStore: storesAssembly.appSettingsStore,
             headerMapper: headerMapper,
@@ -260,6 +265,7 @@ private extension MultichainWalletCoordinator {
             currencyStore: storesAssembly.currencyStore,
             amountFormatter: amountFormatter,
             portfolioStore: storesAssembly.multichainPortfolioStore,
+            demoBalanceStore: demoBalanceStore,
             stakingPoolsStore: storesAssembly.stackingPoolsStore,
             processedBalanceStore: storesAssembly.processedBalanceStore,
             appSettingsStore: storesAssembly.appSettingsStore,

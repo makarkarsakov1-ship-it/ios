@@ -61,6 +61,41 @@ final class MultichainAssetsListSecureModeTests: XCTestCase {
         XCTAssertEqual(amounts?.fiat, "$\u{2009}3")
     }
 
+    func test_demoOverrideChangesOnlyDisplayedAmountAndFiat() {
+        let context = makeContext(isSecureMode: false)
+        let asset = makeAsset()
+        context.demoBalanceStore.setEnabled(true)
+        XCTAssertTrue(context.demoBalanceStore.setAmount("10", for: asset.asset.assetId))
+
+        context.viewModel.applyVisibilityUpdate(
+            TokenManagementVisibilityUpdate(
+                changes: [MultichainAssetFilterChange(assetId: asset.asset.assetId, action: .show)],
+                visibleAssets: [asset]
+            )
+        )
+
+        let amounts = try? XCTUnwrap(amounts(in: context.viewModel))
+        XCTAssertEqual(amounts?.balance, "10")
+        XCTAssertEqual(amounts?.fiat, "$\u{2009}20")
+        XCTAssertEqual(asset.balance, BigUInt(1_500_000))
+    }
+
+    func test_changingDemoOverrideRebuildsLoadedRows() async {
+        let context = makeContext(isSecureMode: false)
+        context.viewModel.applyVisibilityUpdate(makeVisibilityUpdate())
+
+        context.demoBalanceStore.setEnabled(true)
+        XCTAssertTrue(context.demoBalanceStore.setAmount("10", for: makeAsset().asset.assetId))
+
+        await waitUntil {
+            await MainActor.run {
+                self.amounts(in: context.viewModel)?.balance == "10"
+            }
+        }
+
+        XCTAssertEqual(amounts(in: context.viewModel)?.fiat, "$\u{2009}20")
+    }
+
     func test_rowMasksBalanceAndFiatInSecureMode() {
         let context = makeContext(isSecureMode: true)
 
@@ -235,6 +270,7 @@ private extension MultichainAssetsListSecureModeTests {
         let appSettingsStore: AppSettingsStore
         let portfolioStore: MultichainPortfolioStore
         let wallet: Wallet
+        let demoBalanceStore: DemoBalanceStore
     }
 
     func makeContext(
@@ -263,6 +299,8 @@ private extension MultichainAssetsListSecureModeTests {
                 portfolios: cachedPortfolio.map { [makeWallet().id: $0] } ?? [:]
             )
         )
+        let demoBalanceStore = DemoBalanceStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        demoBalanceStore.setWalletID(wallet.id)
         let stakingPoolsStore = StakingPoolsStore(
             walletsStore: walletsStore,
             repository: StakingPoolsInfoRepositoryStub()
@@ -278,6 +316,7 @@ private extension MultichainAssetsListSecureModeTests {
             currencyStore: currencyStore,
             amountFormatter: makeAmountFormatter(),
             portfolioStore: portfolioStore,
+            demoBalanceStore: demoBalanceStore,
             stakingPoolsStore: stakingPoolsStore,
             processedBalanceStore: ProcessedBalanceStore(
                 walletsStore: walletsStore,
@@ -300,7 +339,8 @@ private extension MultichainAssetsListSecureModeTests {
             viewModel: viewModel,
             appSettingsStore: appSettingsStore,
             portfolioStore: portfolioStore,
-            wallet: wallet
+            wallet: wallet,
+            demoBalanceStore: demoBalanceStore
         )
     }
 

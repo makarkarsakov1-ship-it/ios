@@ -1,10 +1,20 @@
+import KeeperCore
 import SwiftUI
 import TKLocalize
 import TKUIKit
 
 struct WalletBalanceMultichainAssetsListView: View {
     @ObservedObject var viewModel: WalletBalanceMultichainAssetsListViewModel
+    @ObservedObject private var demoBalanceStore: DemoBalanceStore
     let showsSkeleton: Bool
+
+    @State private var showsDemoEditor = false
+
+    init(viewModel: WalletBalanceMultichainAssetsListViewModel, showsSkeleton: Bool) {
+        self.viewModel = viewModel
+        self._demoBalanceStore = ObservedObject(wrappedValue: viewModel.demoBalanceStore)
+        self.showsSkeleton = showsSkeleton
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if showsSkeleton {
@@ -28,6 +38,12 @@ struct WalletBalanceMultichainAssetsListView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showsDemoEditor) {
+            DemoBalanceEditorView(
+                store: demoBalanceStore,
+                assets: viewModel.demoAssets
+            )
         }
     }
 
@@ -94,9 +110,24 @@ struct WalletBalanceMultichainAssetsListView: View {
     }
 
     private var listTitle: some View {
-        ListTitleView(
-            config: listTitleConfig
-        )
+        HStack(spacing: 8) {
+            ListTitleView(config: listTitleConfig)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                showsDemoEditor = true
+            } label: {
+                Text(demoBalanceStore.isEnabled ? "DEMO ON" : "DEMO")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(demoBalanceStore.isEnabled ? Color.white : Color.accentColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        demoBalanceStore.isEnabled ? Color.accentColor : Color.accentColor.opacity(0.10),
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(.plain)
+        }
         .padding(.trailing, 7)
     }
 
@@ -146,5 +177,140 @@ private extension WalletBalanceMultichainAssetsListView {
         static let errorTopPadding: CGFloat = 32
         static let expandAnimation: Animation = .easeInOut(duration: 0.25)
         static let skeletonRowCount = 10
+    }
+}
+
+
+private struct DemoBalanceEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var store: DemoBalanceStore
+    let assets: [MultichainAsset]
+
+    @State private var newName = ""
+    @State private var newSymbol = ""
+    @State private var newAmount = ""
+    @State private var newPrice = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle(
+                        "Demo Mode",
+                        isOn: Binding(
+                            get: { store.isEnabled },
+                            set: { store.setEnabled($0) }
+                        )
+                    )
+                } footer: {
+                    Text("Изменения влияют только на отображение балансов на этом экране. Реальные средства и транзакции не меняются.")
+                }
+
+                Section("Баланс активов") {
+                    if assets.isEmpty {
+                        Text("Сначала дождись загрузки списка активов.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(assets, id: \.asset.assetId) { asset in
+                            HStack(spacing: 12) {
+                                Text(asset.asset.symbol)
+                                    .font(.body.weight(.medium))
+                                    .frame(minWidth: 56, alignment: .leading)
+                                TextField(
+                                    "Демо-количество",
+                                    text: Binding(
+                                        get: { store.savedAmountText(for: asset.asset.assetId) ?? "" },
+                                        set: { _ = store.setAmount($0, for: asset.asset.assetId) }
+                                    )
+                                )
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }
+                }
+
+                Section("Свои демо-токены") {
+                    ForEach(store.customAssets) { asset in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(asset.name)
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Text(asset.symbol)
+                                    .foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                TextField("Количество", text: customBinding(asset, keyPath: \.amount))
+                                    .keyboardType(.decimalPad)
+                                TextField("Цена за 1", text: customBinding(asset, keyPath: \.unitPrice))
+                                    .keyboardType(.decimalPad)
+                            }
+                            Button("Удалить токен", role: .destructive) {
+                                store.removeCustomAsset(id: asset.id)
+                            }
+                            .font(.caption)
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    TextField("Название", text: $newName)
+                    TextField("Тикер (например, TEST)", text: $newSymbol)
+                        .textInputAutocapitalization(.characters)
+                    TextField("Количество", text: $newAmount)
+                        .keyboardType(.decimalPad)
+                    TextField("Цена за 1 в валюте портфеля", text: $newPrice)
+                        .keyboardType(.decimalPad)
+
+                    Button("Добавить демо-токен") {
+                        guard store.addCustomAsset(
+                            name: newName,
+                            symbol: newSymbol,
+                            amount: newAmount,
+                            unitPrice: newPrice
+                        ) else { return }
+                        newName = ""
+                        newSymbol = ""
+                        newAmount = ""
+                        newPrice = ""
+                        store.setEnabled(true)
+                    }
+                    .disabled(
+                        newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        newSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        newAmount.isEmpty || newPrice.isEmpty
+                    )
+                } footer: {
+                    Text("Свои токены существуют только в Demo Mode. Цена задаётся вручную в текущей валюте портфеля; в блокчейн они не добавляются.")
+                }
+
+                Section {
+                    Button("Сбросить демо-балансы", role: .destructive) {
+                        store.reset()
+                    }
+                }
+            }
+            .navigationTitle("Demo Mode")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func customBinding(
+        _ asset: DemoBalanceStore.CustomAsset,
+        keyPath: WritableKeyPath<DemoBalanceStore.CustomAsset, String>
+    ) -> Binding<String> {
+        Binding(
+            get: { store.customAssets.first(where: { $0.id == asset.id })?[keyPath: keyPath] ?? asset[keyPath: keyPath] },
+            set: { value in
+                var updated = store.customAssets.first(where: { $0.id == asset.id }) ?? asset
+                updated[keyPath: keyPath] = value
+                _ = store.updateCustomAsset(updated)
+            }
+        )
     }
 }

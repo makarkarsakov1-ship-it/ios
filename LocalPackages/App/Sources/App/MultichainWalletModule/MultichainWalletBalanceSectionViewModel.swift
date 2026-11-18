@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import KeeperCore
 import TKCore
@@ -17,6 +18,8 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
     private let totalBalanceModel: WalletTotalBalanceModel
     private let balanceLoader: BalanceLoader
     private let portfolioStore: MultichainPortfolioStore
+    let demoBalanceStore: DemoBalanceStore
+    private var demoStoreCancellable: AnyCancellable?
     private let currencyStore: CurrencyStore
     private let appSettingsStore: AppSettingsStore
     private let headerMapper: WalletBalanceHeaderMapper
@@ -34,6 +37,7 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
         balanceLoader: BalanceLoader,
         walletsStore: WalletsStore,
         portfolioStore: MultichainPortfolioStore,
+        demoBalanceStore: DemoBalanceStore,
         currencyStore: CurrencyStore,
         appSettingsStore: AppSettingsStore,
         headerMapper: WalletBalanceHeaderMapper,
@@ -43,6 +47,7 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
         self.totalBalanceModel = totalBalanceModel
         self.balanceLoader = balanceLoader
         self.portfolioStore = portfolioStore
+        self.demoBalanceStore = demoBalanceStore
         self.currencyStore = currencyStore
         self.appSettingsStore = appSettingsStore
         self.headerMapper = headerMapper
@@ -56,6 +61,10 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
 
         freshnessModel.didUpdateFreshness = { [weak self] _ in
             self?.update()
+        }
+
+        demoStoreCancellable = demoBalanceStore.objectWillChange.sink { [weak self] in
+            Task { @MainActor in self?.update() }
         }
 
         freshnessModel.onNeedsRefresh = { [weak self] in
@@ -179,11 +188,47 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
     }
 
     private func portfolioTotal() -> (amount: Decimal, currency: Currency)? {
-        guard let total = portfolioStore.getState()[wallet] else { return nil }
-        return portfolioFormatting.portfolioFiatTotalAndCurrency(
+        let currency = currencyStore.getState()
+        guard let total = portfolioStore.getState()[wallet] else {
+            guard demoBalanceStore.isEnabled, !demoBalanceStore.customAssets.isEmpty else { return nil }
+            let customTotal = demoBalanceStore.customAssets.reduce(Decimal.zero) { partial, asset in
+                let amount = Decimal(string: asset.amount, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+                let price = Decimal(string: asset.unitPrice, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+                return partial + amount * price
+            }
+            return (customTotal, currency)
+        }
+        guard demoBalanceStore.isEnabled else {
+            return portfolioFormatting.portfolioFiatTotalAndCurrency(
+                from: total.fiatPrice,
+                displayCurrency: currency
+            )
+        }
+
+        guard let originalTotal = portfolioFormatting.portfolioFiatTotalAndCurrency(
             from: total.fiatPrice,
-            displayCurrency: currencyStore.getState()
-        )
+            displayCurrency: currency
+        ) else {
+            return nil
+        }
+
+        let effectiveCurrency = originalTotal.currency
+        let amount = total.assets.reduce(originalTotal.amount) { partial, asset in
+            guard let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId),
+                  let originalAssetValue = portfolioFormatting.convertedAmount(for: asset, currency: effectiveCurrency),
+                  let unitPrice = portfolioFormatting.lookupDouble(in: asset.price.prices, currency: effectiveCurrency)
+            else {
+                return partial
+            }
+            let demoAssetValue = demoAmount * Decimal(unitPrice)
+            return partial - originalAssetValue + demoAssetValue
+        }
+        let customTotal = demoBalanceStore.customAssets.reduce(Decimal.zero) { partial, asset in
+            let quantity = Decimal(string: asset.amount, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+            let unitPrice = Decimal(string: asset.unitPrice, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+            return partial + quantity * unitPrice
+        }
+        return (amount + customTotal, effectiveCurrency)
     }
 
     private func setConfig(_ config: BalanceViewConfig) {
