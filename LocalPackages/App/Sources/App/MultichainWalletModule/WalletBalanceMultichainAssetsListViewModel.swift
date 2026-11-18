@@ -729,6 +729,46 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
         )
     }
 
+    private func makeDemoRow(
+        _ asset: DemoBalanceStore.CustomAsset,
+        displayCurrency: Currency,
+        isSecureMode: Bool
+    ) -> AssetBalanceRowCellContent {
+        let amount = Decimal(string: asset.amount, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+        let unitPrice = Decimal(string: asset.unitPrice, locale: Locale(identifier: "en_US_POSIX")) ?? .zero
+        let fiatTotal = amount * unitPrice
+        let balanceText = isSecureMode ? String.secureModeValueShort : asset.amount
+        let priceText = amountFormatter.format(
+            decimal: unitPrice,
+            accessory: .fiat(displayCurrency),
+            style: .compact
+        )
+        let fiatText = isSecureMode
+            ? String.secureModeValueShort
+            : amountFormatter.format(
+                decimal: fiatTotal,
+                accessory: .fiat(displayCurrency),
+                style: .compact
+            )
+
+        return AssetBalanceRowCellContent(
+            id: "demo/\(asset.id)",
+            title: asset.symbol,
+            badge: nil,
+            apy: nil,
+            displayMode: .includingDiffs(
+                balance: balanceText,
+                price: priceText,
+                delta: nil,
+                fiat: fiatText,
+                showsPin: false,
+                priceColor: .textSecondary
+            ),
+            avatarImageSource: .image(.TKUIKit.Icons.Size44.tonLogo),
+            showsVerificationCheckmark: false
+        )
+    }
+
     private func apyText(for assetId: String) -> String? {
         if case .ton = TradingAssetToken(assetId: assetId) {
             return tonStakingAPYTextFormatter(tonStakingAPYProvider(wallet))
