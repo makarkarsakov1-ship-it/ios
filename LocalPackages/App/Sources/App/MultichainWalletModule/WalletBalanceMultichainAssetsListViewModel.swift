@@ -115,6 +115,8 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
 
     let canManage: Bool
 
+    var demoAssets: [MultichainAsset] { state.rowData?.assets ?? [] }
+
     private(set) var wallet: Wallet
 
     var onSelectAsset: ((MultichainAsset) -> Void)?
