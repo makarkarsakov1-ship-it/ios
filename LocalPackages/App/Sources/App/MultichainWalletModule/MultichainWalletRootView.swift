@@ -27,6 +27,7 @@ private struct MultichainWalletContentView: View {
             VStack(spacing: 0) {
                 MultichainWalletBalanceSection(
                     viewModel: viewModel.balanceViewModel,
+                    demoBalanceStore: viewModel.balanceViewModel.demoBalanceStore,
                     showsShimmer: showsSkeleton
                 )
 
@@ -178,6 +179,7 @@ private extension MultichainWalletContentView {
 
 private struct MultichainWalletBalanceSection: View {
     @ObservedObject var viewModel: MultichainWalletBalanceSectionViewModel
+    @ObservedObject var demoBalanceStore: DemoBalanceStore
     let showsShimmer: Bool
 
     private var config: BalanceViewConfig {
@@ -193,6 +195,18 @@ private struct MultichainWalletBalanceSection: View {
             batteryAction: viewModel.batteryPressed
         )
         .frame(height: height(for: config), alignment: .top)
+        .overlay(alignment: .topTrailing) {
+            if demoBalanceStore.isEnabled {
+                Text("DEMO")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.accentColor, in: Capsule())
+                    .padding(.trailing, 20)
+                    .padding(.top, 4)
+            }
+        }
         .clipped()
     }
 
