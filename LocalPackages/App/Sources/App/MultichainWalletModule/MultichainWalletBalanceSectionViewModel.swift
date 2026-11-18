@@ -197,17 +197,24 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
             )
         }
 
-        let amount = total.assets.reduce(Decimal.zero) { partial, asset in
-            if let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId) {
-                let unitPrice = portfolioFormatting.lookupDouble(
-                    in: asset.price.prices,
-                    currency: currency
-                ) ?? 0
-                return partial + demoAmount * Decimal(unitPrice)
-            }
-            return partial + (portfolioFormatting.convertedAmount(for: asset, currency: currency) ?? .zero)
+        guard let originalTotal = portfolioFormatting.portfolioFiatTotalAndCurrency(
+            from: total.fiatPrice,
+            displayCurrency: currency
+        ) else {
+            return nil
         }
-        return (amount, currency)
+
+        let amount = total.assets.reduce(originalTotal.amount) { partial, asset in
+            guard let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId),
+                  let originalAssetValue = portfolioFormatting.convertedAmount(for: asset, currency: currency),
+                  let unitPrice = portfolioFormatting.lookupDouble(in: asset.price.prices, currency: currency)
+            else {
+                return partial
+            }
+            let demoAssetValue = demoAmount * Decimal(unitPrice)
+            return partial - originalAssetValue + demoAssetValue
+        }
+        return (amount, originalTotal.currency)
     }
 
     private func setConfig(_ config: BalanceViewConfig) {
