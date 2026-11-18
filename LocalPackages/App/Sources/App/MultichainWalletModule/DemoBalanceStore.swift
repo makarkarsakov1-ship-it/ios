@@ -66,7 +66,6 @@ final class DemoBalanceStore: ObservableObject {
 
         guard let value = Decimal(string: trimmed, locale: Locale(identifier: "en_US_POSIX")),
               value >= .zero,
-              value.isFinite
         else {
             return false
         }
