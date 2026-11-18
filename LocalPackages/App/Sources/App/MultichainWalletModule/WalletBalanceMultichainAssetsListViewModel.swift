@@ -236,7 +236,9 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
             return
         }
         needsPresentationRefresh = false
-        guard let rowData = state.rowData, !rowData.assets.isEmpty else { return }
+        guard let rowData = state.rowData,
+              !rowData.assets.isEmpty || !demoBalanceStore.customAssets.isEmpty
+        else { return }
         state = state.settingRowData(
             makeRowData(
                 assets: rowData.assets,
@@ -474,6 +476,12 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
             )
             rows.append(row)
             selections[row.id] = .asset(asset)
+        }
+
+        if demoBalanceStore.isEnabled {
+            rows.append(contentsOf: demoBalanceStore.customAssets.map {
+                makeDemoRow($0, displayCurrency: displayCurrency, isSecureMode: isSecureMode)
+            })
         }
 
         return RowData(
