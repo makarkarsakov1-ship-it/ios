@@ -38,8 +38,8 @@ final class DemoBalanceStore: ObservableObject {
         }
     }
 
-    func setWallet(_ wallet: Wallet) {
-        walletID = wallet.id
+    func setWalletID(_ walletID: String) {
+        self.walletID = walletID
     }
 
     private func scopedKey(for assetId: String) -> String {
