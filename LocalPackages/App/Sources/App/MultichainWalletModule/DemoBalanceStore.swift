@@ -19,6 +19,7 @@ final class DemoBalanceStore: ObservableObject {
 
     private let defaults: UserDefaults
     private let storageKey: String
+    private var walletID: String?
 
     init(
         defaults: UserDefaults = .standard,
@@ -37,6 +38,18 @@ final class DemoBalanceStore: ObservableObject {
         }
     }
 
+    func setWallet(_ wallet: Wallet) {
+        walletID = wallet.id
+    }
+
+    private func scopedKey(for assetId: String) -> String {
+        "\(walletID ?? "default")|\(assetId)"
+    }
+
+    func savedAmountText(for assetId: String) -> String? {
+        overrides[scopedKey(for: assetId)]?.amount
+    }
+
     func setEnabled(_ enabled: Bool) {
         guard isEnabled != enabled else { return }
         isEnabled = enabled
@@ -45,7 +58,7 @@ final class DemoBalanceStore: ObservableObject {
 
     func amountText(for assetId: String) -> String? {
         guard isEnabled else { return nil }
-        return overrides[assetId]?.amount
+        return savedAmountText(for: assetId)
     }
 
     func amount(for assetId: String) -> Decimal? {
@@ -59,7 +72,7 @@ final class DemoBalanceStore: ObservableObject {
         guard !assetId.isEmpty else { return false }
 
         if trimmed.isEmpty {
-            overrides.removeValue(forKey: assetId)
+            overrides.removeValue(forKey: scopedKey(for: assetId))
             persist()
             return true
         }
@@ -72,10 +85,10 @@ final class DemoBalanceStore: ObservableObject {
         }
         if let value = Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX")) {
             guard value >= .zero else { return false }
-            overrides[assetId] = Override(amount: normalized)
+            overrides[scopedKey(for: assetId)] = Override(amount: normalized)
         } else if normalized == "." {
             // Keep an in-progress decimal separator editable; it is ignored in calculations.
-            overrides[assetId] = Override(amount: normalized)
+            overrides[scopedKey(for: assetId)] = Override(amount: normalized)
         } else {
             return false
         }
