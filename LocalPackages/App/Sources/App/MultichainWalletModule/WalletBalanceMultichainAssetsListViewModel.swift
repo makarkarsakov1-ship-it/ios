@@ -86,6 +86,7 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
     private let currencyStore: CurrencyStore
     private let amountFormatter: AmountFormatter
     private let portfolioStore: MultichainPortfolioStore
+    let demoBalanceStore: DemoBalanceStore
     private let stakingPoolsStore: StakingPoolsStore
     private let processedBalanceStore: ProcessedBalanceStore
     private let appSettingsStore: AppSettingsStore
@@ -139,6 +140,7 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
         currencyStore: CurrencyStore,
         amountFormatter: AmountFormatter,
         portfolioStore: MultichainPortfolioStore,
+        demoBalanceStore: DemoBalanceStore,
         stakingPoolsStore: StakingPoolsStore,
         processedBalanceStore: ProcessedBalanceStore,
         appSettingsStore: AppSettingsStore,
@@ -153,6 +155,7 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
         self.currencyStore = currencyStore
         self.amountFormatter = amountFormatter
         self.portfolioStore = portfolioStore
+        self.demoBalanceStore = demoBalanceStore
         self.stakingPoolsStore = stakingPoolsStore
         self.processedBalanceStore = processedBalanceStore
         self.appSettingsStore = appSettingsStore
@@ -633,17 +636,18 @@ final class WalletBalanceMultichainAssetsListViewModel: ObservableObject {
             in: item.price.prices,
             currency: displayCurrency
         ) ?? 0
+        let demoAmount = demoBalanceStore.amount(for: item.asset.assetId)
         let balance = isSecureMode
             ? String.secureModeValueShort
-            : multichainFormatter.formatAmount(
-                amount: item.balance,
-                fractionDigits: item.asset.decimals,
-                amountFormatter: amountFormatter
-            )
-        let fiatTotal = multichainFormatter.convertedAmount(
-            for: item,
-            currency: displayCurrency
-        ) ?? .zero
+            : (demoBalanceStore.amountText(for: item.asset.assetId)
+                ?? multichainFormatter.formatAmount(
+                    amount: item.balance,
+                    fractionDigits: item.asset.decimals,
+                    amountFormatter: amountFormatter
+                ))
+        let fiatTotal = demoAmount.map { $0 * Decimal(unitPrice) }
+            ?? multichainFormatter.convertedAmount(for: item, currency: displayCurrency)
+            ?? .zero
 
         let priceText = amountFormatter.format(
             decimal: Decimal(unitPrice),
