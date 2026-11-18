@@ -64,13 +64,21 @@ final class DemoBalanceStore: ObservableObject {
             return true
         }
 
-        guard let value = Decimal(string: trimmed, locale: Locale(identifier: "en_US_POSIX")),
-              value >= .zero,
+        let normalized = trimmed.replacingOccurrences(of: ",", with: ".")
+        guard normalized.allSatisfy({ $0.isNumber || $0 == "." }),
+              normalized.filter({ $0 == "." }).count <= 1
         else {
             return false
         }
-
-        overrides[assetId] = Override(amount: NSDecimalNumber(decimal: value).stringValue)
+        if let value = Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX")) {
+            guard value >= .zero else { return false }
+            overrides[assetId] = Override(amount: normalized)
+        } else if normalized == "." {
+            // Keep an in-progress decimal separator editable; it is ignored in calculations.
+            overrides[assetId] = Override(amount: normalized)
+        } else {
+            return false
+        }
         persist()
         return true
     }
