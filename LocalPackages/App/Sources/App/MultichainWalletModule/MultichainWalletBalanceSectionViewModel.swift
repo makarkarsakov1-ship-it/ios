@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import KeeperCore
 import TKCore
@@ -17,6 +18,8 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
     private let totalBalanceModel: WalletTotalBalanceModel
     private let balanceLoader: BalanceLoader
     private let portfolioStore: MultichainPortfolioStore
+    private let demoBalanceStore: DemoBalanceStore
+    private var demoStoreCancellable: AnyCancellable?
     private let currencyStore: CurrencyStore
     private let appSettingsStore: AppSettingsStore
     private let headerMapper: WalletBalanceHeaderMapper
@@ -34,6 +37,7 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
         balanceLoader: BalanceLoader,
         walletsStore: WalletsStore,
         portfolioStore: MultichainPortfolioStore,
+        demoBalanceStore: DemoBalanceStore,
         currencyStore: CurrencyStore,
         appSettingsStore: AppSettingsStore,
         headerMapper: WalletBalanceHeaderMapper,
@@ -43,6 +47,7 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
         self.totalBalanceModel = totalBalanceModel
         self.balanceLoader = balanceLoader
         self.portfolioStore = portfolioStore
+        self.demoBalanceStore = demoBalanceStore
         self.currencyStore = currencyStore
         self.appSettingsStore = appSettingsStore
         self.headerMapper = headerMapper
@@ -56,6 +61,10 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
 
         freshnessModel.didUpdateFreshness = { [weak self] _ in
             self?.update()
+        }
+
+        demoStoreCancellable = demoBalanceStore.objectWillChange.sink { [weak self] in
+            Task { @MainActor in self?.update() }
         }
 
         freshnessModel.onNeedsRefresh = { [weak self] in
@@ -180,10 +189,25 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
 
     private func portfolioTotal() -> (amount: Decimal, currency: Currency)? {
         guard let total = portfolioStore.getState()[wallet] else { return nil }
-        return portfolioFormatting.portfolioFiatTotalAndCurrency(
-            from: total.fiatPrice,
-            displayCurrency: currencyStore.getState()
-        )
+        let currency = currencyStore.getState()
+        guard demoBalanceStore.isEnabled else {
+            return portfolioFormatting.portfolioFiatTotalAndCurrency(
+                from: total.fiatPrice,
+                displayCurrency: currency
+            )
+        }
+
+        let amount = total.assets.reduce(Decimal.zero) { partial, asset in
+            if let demoAmount = demoBalanceStore.amount(for: asset.asset.assetId) {
+                let unitPrice = portfolioFormatting.lookupDouble(
+                    in: asset.price.prices,
+                    currency: currency
+                ) ?? 0
+                return partial + demoAmount * Decimal(unitPrice)
+            }
+            return partial + (portfolioFormatting.convertedAmount(for: asset, currency: currency) ?? .zero)
+        }
+        return (amount, currency)
     }
 
     private func setConfig(_ config: BalanceViewConfig) {
