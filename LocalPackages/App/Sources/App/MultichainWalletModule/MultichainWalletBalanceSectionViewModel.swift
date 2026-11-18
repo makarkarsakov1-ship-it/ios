@@ -18,7 +18,7 @@ final class MultichainWalletBalanceSectionViewModel: ObservableObject {
     private let totalBalanceModel: WalletTotalBalanceModel
     private let balanceLoader: BalanceLoader
     private let portfolioStore: MultichainPortfolioStore
-    private let demoBalanceStore: DemoBalanceStore
+    let demoBalanceStore: DemoBalanceStore
     private var demoStoreCancellable: AnyCancellable?
     private let currencyStore: CurrencyStore
     private let appSettingsStore: AppSettingsStore
